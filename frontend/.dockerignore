@@ -1,0 +1,17 @@
+# Dependencies (we re-install them inside Docker)
+node_modules
+
+# Local builds
+dist
+build
+
+# Environment variables
+.env
+.env.local
+
+# Git
+.git
+.gitignore
+
+# System files
+.DS_Store

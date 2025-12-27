@@ -1,0 +1,14 @@
+# --- System & Secrets ---
+.DS_Store
+.env
+
+# --- Private Source Code (Keep out of this repo) ---
+local_agent/
+
+# --- Scratchpad & Dev Files ---
+containers/
+extra/
+
+# --- Global IDE settings ---
+.vscode/
+.idea/

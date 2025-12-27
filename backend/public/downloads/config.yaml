@@ -1,0 +1,45 @@
+# ==========================================
+# CertMonitor Agent Configuration Template
+# ==========================================
+
+# --- 1. Backend Connection ---
+# The URL where the agent sends reports.
+backend_url: "http://localhost:8080/api/certs"
+
+# Your unique API Key (Generate this in the Dashboard)
+# This links the agent to your organization.
+# Format: crt_live_...
+api_key: "crt_live_REPLACE_WITH_YOUR_KEY"
+
+# --- 2. File Scanning ---
+# List of directories to recursively scan for certificate files.
+# The agent looks for .pem, .crt, .cer files.
+cert_paths:
+  - "/etc/ssl/certs"
+  # - "/etc/pki/tls/certs"
+  # - "/usr/local/share/ca-certificates"
+  # - "/opt/docker/secrets"
+
+# --- 3. Network Scanning ---
+# List of "host:port" to perform TLS handshakes with.
+# Useful for internal load balancers, databases, or containerized apps
+# where you don't have direct access to the file system.
+network_scans:
+  - "google.com:443"
+  # - "localhost:8443"
+  # - "postgres-db.internal:5432"
+
+# --- 4. Agent State ---
+# Directory where the agent stores its identity (UUID) file.
+# Ensure the user running the agent has write permissions here.
+state_path: "."
+
+# --- 5. Logging & Behavior ---
+# How often to run the scan (in minutes). Default is 60.
+scan_interval_minutes: 60
+
+# Log file location
+log_path: "./agent.log"
+
+# Print logs to standard output (useful for Docker/Systemd)
+log_console: true

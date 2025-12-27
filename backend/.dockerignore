@@ -1,0 +1,21 @@
+# Security: NEVER copy the .env file into the image
+.env
+
+# System files
+.DS_Store
+
+# Git history (massive and unnecessary)
+.git
+.gitignore
+
+# Personal Notes & Prompts (Cleanliness)
+notes.txt
+prompt1.txt
+prompt2.txt
+project_structure.txt
+
+# Local builds/binaries (We rebuild them inside Docker)
+cert-server
+cert-server.exe
+dist
+vendor

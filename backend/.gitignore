@@ -1,0 +1,15 @@
+# Security: NEVER copy the .env file into the image
+.env
+
+# System files
+.DS_Store
+
+# Ignore the compiled binary (if built locally)
+cert-server
+cert-server.exe
+
+# Personal Notes & Prompts (Cleanliness)
+notes.txt
+prompt1.txt
+prompt2.txt
+project_structure.txt
