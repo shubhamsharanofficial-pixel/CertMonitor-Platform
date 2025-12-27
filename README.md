@@ -59,7 +59,8 @@ The central platform runs as a **3-Container Docker Cluster**:
 
 ### **1\. Clone & Prepare**
 
-git clone \[https://github.com/your-username/cert-monitor-platform.git\](https://github.com/your-username/cert-monitor-platform.git)  
+git clone https://github.com/shubhamsharanofficial-pixel/CertMonitor-Platform.git
+
 cd cert-monitor-platform
 
 ### **2\. Configure Environment**
