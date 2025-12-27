@@ -42,7 +42,7 @@ The central platform runs as a **3-Container Docker Cluster**:
 
 ## **🔄 How It Works (Data Flow)**
 
-1. **Discovery:** The Agent scans local paths and network ports. It compiles a JSON report and POSTs it to https://your-domain.com/api/certs.  
+1. **Discovery:** The Agent scans local paths and network ports. It compiles a JSON report and POSTs it to domain.com/api/certs.  
 2. **Ingestion:** Nginx receives the request and proxies it to the Backend.  
 3. **Processing:** The Backend opens a transaction:  
    * **Deduplicates** certificates (storing distinct certs once, linking them to multiple agents).  
