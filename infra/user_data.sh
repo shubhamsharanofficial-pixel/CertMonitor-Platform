@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Log output for debugging
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "Starting CertMonitor Setup..."
@@ -19,7 +18,7 @@ echo \
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# 2. Setup Swap (2GB) - Critical for 1GB RAM servers
+# 2. Setup Swap (2GB)
 fallocate -l 2G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
@@ -31,12 +30,12 @@ echo "Cloning Repository..."
 if git clone https://github.com/shubhamsharanofficial-pixel/CertMonitor-Platform.git /home/ubuntu/app; then
     echo "✅ Git clone successful."
 else
-    echo "❌ CRITICAL ERROR: Git clone failed. Check repository URL or visibility."
-    # Exit the script so we don't try to start a non-existent app
+    echo "❌ CRITICAL ERROR: Git clone failed. Check URL."
     exit 1
 fi
 
-# 4. Generate .env file from Terraform variables
+# 4. Generate .env file
+# We use the IP passed from Terraform directly
 cat <<EOF > /home/ubuntu/app/.env
 DB_PASSWORD=${db_password}
 JWT_SECRET=${jwt_secret}
@@ -45,6 +44,7 @@ SMTP_PORT=${smtp_port}
 SMTP_USER=${smtp_user}
 SMTP_PASS=${smtp_pass}
 SMTP_SENDER=${smtp_sender}
+FRONTEND_URL=http://${public_ip}
 EOF
 
 # 5. Start Application

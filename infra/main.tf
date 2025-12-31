@@ -8,17 +8,16 @@ terraform {
 }
 
 provider "aws" {
-  region = "ap-south-1" # Mumbai
+  region = "ap-south-1"
 }
 
 # --- Variables ---
-
 variable "instance_type" {
   description = "EC2 Instance Type"
   default     = "t3.micro"
   validation {
     condition     = contains(["t2.micro", "t3.micro"], var.instance_type)
-    error_message = "FATAL ERROR: Instance type must be 't2.micro' or 't3.micro' to remain in AWS Free Tier."
+    error_message = "FATAL ERROR: Instance type must be 't2.micro' or 't3.micro'."
   }
 }
 
@@ -27,31 +26,21 @@ variable "volume_size" {
   default     = 30
   validation {
     condition     = var.volume_size <= 30
-    error_message = "FATAL ERROR: Volume size cannot exceed 30GB (AWS Free Tier Limit)."
+    error_message = "FATAL ERROR: Volume size cannot exceed 30GB."
   }
 }
 
-# NEW: Path to the local .sql backup file (Optional)
-# If left empty "", restore is skipped.
-variable "db_backup_path" {
-  description = "Local path to .sql backup file to restore (e.g., ./backups/backup.sql)"
-  default     = ""
-}
+variable "db_backup_path" { default = "" }
+variable "private_key_path" { default = "./cert-monitor-key.pem" }
 
-# NEW: Path to private key for file upload
-variable "private_key_path" {
-  description = "Path to the local private key .pem file"
-  default     = "./cert-monitor-key.pem"
-}
-
+# Secrets
 variable "db_password" { sensitive = true }
 variable "jwt_secret" { sensitive = true }
 variable "smtp_user" {}
 variable "smtp_pass" { sensitive = true }
 variable "smtp_sender" {}
 
-# --- Resources ---
-
+# --- 1. Security Group ---
 resource "aws_security_group" "cert_sg" {
   name        = "cert-monitor-sg"
   description = "Allow Web and SSH"
@@ -99,6 +88,13 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+# --- 2. Allocate Elastic IP (FIRST) ---
+# We create this separately so we can know the IP address before the server starts
+resource "aws_eip" "lb" {
+  domain = "vpc"
+}
+
+# --- 3. EC2 Instance ---
 resource "aws_instance" "app_server" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance_type
@@ -111,7 +107,9 @@ resource "aws_instance" "app_server" {
     volume_type = "gp3"
   }
 
+  # Inject configuration
   user_data = templatefile("user_data.sh", {
+    public_ip   = aws_eip.lb.public_ip
     db_password = var.db_password
     jwt_secret  = var.jwt_secret
     smtp_host   = "smtp-relay.brevo.com"
@@ -126,11 +124,14 @@ resource "aws_instance" "app_server" {
   }
 }
 
-resource "aws_eip" "lb" {
-  instance = aws_instance.app_server.id
+# --- 4. Associate IP to Instance (LAST) ---
+# This glue connects the IP (Step 2) to the Instance (Step 3)
+resource "aws_eip_association" "eip_assoc" {
+  instance_id   = aws_instance.app_server.id
+  allocation_id = aws_eip.lb.id
 }
 
-# --- 5. Conditional DB Restore ---
+# --- 5. DB Restore Logic ---
 resource "null_resource" "db_restore" {
   # Only run if a path is provided
   count = var.db_backup_path != "" ? 1 : 0
@@ -169,8 +170,7 @@ resource "null_resource" "db_restore" {
     ]
   }
 
-  # Ensure IP is attached before trying to SSH
-  depends_on = [aws_eip.lb]
+  depends_on = [aws_eip_association.eip_assoc]
 }
 
 output "server_ip" {

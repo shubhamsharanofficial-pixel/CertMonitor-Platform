@@ -39,7 +39,7 @@ func LoadConfig() *Config {
 		DatabaseURL: getEnv("DB_CONN", "postgres://postgres:postgres@localhost:5432/certdb?sslmode=disable"),
 		JWTSecret:   getEnv("JWT_SECRET", "SUPER_SECRET_KEY_CHANGE_ME_IN_PROD"),
 		Port:        getEnv("PORT", "8080"),
-		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:5173"),
+		FrontendURL: getEnv("FRONTEND_URL", "http://localhost"),
 
 		// Parse integers from env, convert to Duration
 		AgentOfflineMinutes: time.Duration(getEnvInt("AGENT_OFFLINE_MINUTES", 120)) * time.Minute,

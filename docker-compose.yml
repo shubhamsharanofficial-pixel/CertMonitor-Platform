@@ -34,7 +34,7 @@ services:
       PORT: "8080"
       # IMPORTANT: In Production, change this to "https://your-domain.com"
       # This is used for email verification links.
-      FRONTEND_URL: "http://localhost"
+      FRONTEND_URL: "${FRONTEND_URL}"
     logging:
       driver: "json-file"
       options:
