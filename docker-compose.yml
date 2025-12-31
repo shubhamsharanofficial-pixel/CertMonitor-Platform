@@ -2,7 +2,6 @@ version: '3.8'
 
 services:
   # --- 1. Database ---
-  # Internal only. No public ports exposed.
   db:
     image: postgres:15-alpine
     container_name: cert_db
@@ -10,20 +9,16 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: certdb
-      # Reads from your local .env file on the server
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      # Persistent storage managed by Docker
       - postgres_data:/var/lib/postgresql/data
-    # Log Rotation: Prevents disk from filling up
     logging:
       driver: "json-file"
       options:
-        max-size: "10m" # Max size of a single log file
-        max-file: "3"   # Keep only the last 3 files
+        max-size: "10m"
+        max-file: "3"
 
   # --- 2. Backend (Go) ---
-  # Internal only. Talks to DB via internal network.
   backend:
     build:
       context: ./backend
@@ -32,16 +27,14 @@ services:
     restart: always
     depends_on:
       - db
-    # Inject secrets at runtime from the host file
     env_file:
       - .env
     environment:
-      # OVERRIDE: We must change 'localhost' to 'db' (the service name)
       DB_CONN: "postgres://postgres:${DB_PASSWORD}@db:5432/certdb?sslmode=disable"
       PORT: "8080"
-      # Used for generating email links (Verify/Reset)
-      # In prod, change this to "https://your-domain.com"
-      FRONTEND_URL: "http://localhost" 
+      # IMPORTANT: In Production, change this to "https://your-domain.com"
+      # This is used for email verification links.
+      FRONTEND_URL: "http://localhost"
     logging:
       driver: "json-file"
       options:
@@ -49,15 +42,15 @@ services:
         max-file: "3"
 
   # --- 3. Frontend (Nginx + React) ---
-  # The only public facing container.
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: cert_frontend
     restart: always
-    ports:
-      - "80:80" # Standard HTTP port
+    # REMOVED: ports: - "80:80" 
+    # Why? Because 'npm' (below) now owns Port 80.
+    # The frontend is now private, reachable only by 'npm' via internal network.
     depends_on:
       - backend
     logging:
@@ -66,6 +59,27 @@ services:
         max-size: "10m"
         max-file: "3"
 
-# Define the named volume for persistence
+  # --- 4. Nginx Proxy Manager (The SSL Gateway) ---
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: cert_npm
+    restart: always
+    # This container OWNS the public ports now
+    ports:
+      - '80:80'   # HTTP traffic
+      - '443:443' # HTTPS traffic
+      - '81:81'   # Admin Interface (Login here to setup SSL)
+    # Persistent storage for SSL certs and NPM database
+    volumes:
+      - ./npm_data:/data
+      - ./npm_letsencrypt:/etc/letsencrypt
+    depends_on:
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   postgres_data:

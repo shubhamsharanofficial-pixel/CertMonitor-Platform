@@ -2,8 +2,12 @@
 .DS_Store
 .env
 
-# --- Private Source Code (Keep out of this repo) ---
+# --- local data + code ---
+npm_data/
+npm_letsencrypt/
 local_agent/
+infra/cert-monitor-key.pem
+infra/secrets.tfvars
 
 # --- Scratchpad & Dev Files ---
 containers/
@@ -12,3 +16,13 @@ extra/
 # --- Global IDE settings ---
 .vscode/
 .idea/
+
+# Terraform Secrets & State
+*.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform*
+
+# SSH Keys
+*.pem
