@@ -15,6 +15,7 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/cert-agent"
 STATE_DIR="/var/lib/cert-agent"
 SCAN_PATHS="/etc/ssl,/var/www,/usr/local/share/ca-certificates" 
+SERVICE_FILE=""
 
 show_help() {
     echo "Usage: curl ... | sudo bash -s -- -k <KEY>"
@@ -77,6 +78,7 @@ else
     echo -e "${RED}Error: Need curl or wget${NC}"; exit 1
 fi
 chmod +x "$TARGET_BIN"
+echo "Binary saved to: $TARGET_BIN"
 
 # Remove macOS quarantine attribute if present (fixes "killed" or "cannot check for malicious software" errors)
 if [ "$OS" = "Darwin" ] && command -v xattr >/dev/null 2>&1; then
@@ -94,9 +96,12 @@ cat > "$CONFIG_FILE" <<EOF
 backend_url: "${BASE_URL}/certs"
 api_key: "${API_KEY}"
 state_path: "${STATE_DIR}"
+
 scan_interval_minutes: 60
+
 log_path: "${LOG_FILE}"
 log_console: true
+
 cert_paths:
 EOF
 
@@ -104,6 +109,13 @@ IFS=',' read -ra PATH_ADDR <<< "$SCAN_PATHS"
 for i in "${PATH_ADDR[@]}"; do
     echo "  - \"$i\"" >> "$CONFIG_FILE"
 done
+
+# Append Network Scans configuration
+cat >> "$CONFIG_FILE" <<EOF
+
+network_scans:
+  - "google.com:443"
+EOF
 
 # 5. Service Installation (Linux Only)
 if [ "$OS" = "Linux" ] && [ -d "/etc/systemd/system" ] && command -v systemctl >/dev/null 2>&1; then
@@ -152,12 +164,24 @@ ${LOG_FILE} {
     copytruncate
 }
 EOF
+        echo "Log rotation config created at: /etc/logrotate.d/cert-agent"
     else
         echo -e "${YELLOW}Warning: /etc/logrotate.d not found. Log rotation not configured.${NC}"
         echo "Please manually manage log file size: ${LOG_FILE}"
     fi
 fi
 
-echo "------------------------------------------------"
-echo "Log File: $LOG_FILE"
-echo "------------------------------------------------"
+echo ""
+echo "================================================"
+echo "           INSTALLATION SUMMARY"
+echo "================================================"
+echo "Binary:    $TARGET_BIN"
+echo "Config:    $CONFIG_FILE"
+echo "Logs:      $LOG_FILE"
+if [ -n "$SERVICE_FILE" ]; then
+    echo "Service:   $SERVICE_FILE"
+    echo ""
+    echo "To edit config:  sudo nano $CONFIG_FILE"
+    echo "To restart:      sudo systemctl restart cert-agent"
+fi
+echo "================================================"
