@@ -14,7 +14,6 @@ API_KEY=""
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/cert-agent"
 STATE_DIR="/var/lib/cert-agent"
-SCAN_PATHS="/etc/ssl,/var/www,/usr/local/share/ca-certificates" 
 SERVICE_FILE=""
 
 show_help() {
@@ -27,7 +26,6 @@ while [[ "$#" -gt 0 ]]; do
         -k|--key) API_KEY="$2"; shift ;;
         -s|--state-dir) STATE_DIR="$2"; shift ;;
         -c|--config-dir) CONFIG_DIR="$2"; shift ;;
-        -p|--paths) SCAN_PATHS="$2"; shift ;;
         -h|--help) show_help; exit 0 ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
@@ -85,37 +83,38 @@ if [ "$OS" = "Darwin" ] && command -v xattr >/dev/null 2>&1; then
     xattr -d com.apple.quarantine "$TARGET_BIN" 2>/dev/null || true
 fi
 
-# 4. Generate Config
+# 4. Generate Config (From Template)
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
-echo "Generating config at $CONFIG_FILE..."
-
-# Default log path inside state dir
+TEMPLATE_URL="${BASE_URL}/downloads/config.yaml"
+# Log path relative to the state dir for the agent log
 LOG_FILE="$STATE_DIR/agent.log"
 
-cat > "$CONFIG_FILE" <<EOF
-backend_url: "${BASE_URL}/certs"
-api_key: "${API_KEY}"
-state_path: "${STATE_DIR}"
+echo "Fetching config template from $TEMPLATE_URL..."
 
-scan_interval_minutes: 60
+if command -v curl >/dev/null 2>&1; then
+    curl -f -sL -o "$CONFIG_FILE" "$TEMPLATE_URL"
+elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$CONFIG_FILE" "$TEMPLATE_URL"
+else
+    echo -e "${RED}Error: Need curl or wget to download config${NC}"; exit 1
+fi
 
-log_path: "${LOG_FILE}"
-log_console: true
+echo "Configuring agent settings..."
 
-cert_paths:
-EOF
+# Helper to replace values in YAML safely (Works on Linux & Mac)
+replace_yaml_value() {
+    local key=$1
+    local val=$2
+    local file=$3
+    # Use | as delimiter to avoid escaping slashes in URLs/Paths
+    sed "s|^$key:.*|$key: \"$val\"|" "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
 
-IFS=',' read -ra PATH_ADDR <<< "$SCAN_PATHS"
-for i in "${PATH_ADDR[@]}"; do
-    echo "  - \"$i\"" >> "$CONFIG_FILE"
-done
-
-# Append Network Scans configuration
-cat >> "$CONFIG_FILE" <<EOF
-
-network_scans:
-  - "google.com:443"
-EOF
+# Inject the dynamic values into the downloaded template
+replace_yaml_value "backend_url" "${BASE_URL}/certs" "$CONFIG_FILE"
+replace_yaml_value "api_key" "${API_KEY}" "$CONFIG_FILE"
+replace_yaml_value "state_path" "${STATE_DIR}" "$CONFIG_FILE"
+replace_yaml_value "log_path" "${LOG_FILE}" "$CONFIG_FILE"
 
 # 5. Service Installation (Linux Only)
 if [ "$OS" = "Linux" ] && [ -d "/etc/systemd/system" ] && command -v systemctl >/dev/null 2>&1; then

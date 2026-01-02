@@ -8,6 +8,7 @@ npm_letsencrypt/
 local_agent/
 infra/cert-monitor-key.pem
 infra/secrets.tfvars
+my-private-ca/
 
 # --- Scratchpad & Dev Files ---
 containers/

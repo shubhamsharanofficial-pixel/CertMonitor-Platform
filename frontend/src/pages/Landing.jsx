@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Server, Zap, ArrowRight, Download, Terminal, Lock } from 'lucide-react';
+import { Shield, Server, Zap, ArrowRight, Download, Terminal, Lock, Activity, CheckCircle } from 'lucide-react';
 
 export default function Landing() {
   return (
@@ -28,7 +28,6 @@ export default function Landing() {
       {/* 2. Hero Section */}
       <section className="pt-20 pb-32 px-6 relative overflow-hidden">
         <div className="max-w-7xl mx-auto text-center relative z-10">
-            {/* UPDATED: Increased text size and padding */}
             <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm md:text-base font-bold mb-8 border border-blue-100 shadow-sm">
                 <span className="relative flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
@@ -88,8 +87,75 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* 4. Footer */}
-      <footer className="bg-white border-t border-slate-200 py-12">
+      {/* 4. Demo Showcase (NEW SECTION) */}
+      <section className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-16">
+                <h2 className="text-3xl font-bold text-slate-900">See It In Action</h2>
+                <p className="text-slate-500 mt-4 text-lg">A single pane of glass for all your certificates.</p>
+            </div>
+
+            {/* Dashboard Screenshot */}
+            <div className="relative rounded-xl bg-slate-900 p-2 shadow-2xl border border-slate-800 mb-20 transform hover:scale-[1.01] transition-transform duration-500">
+                {/* Browser Window Chrome */}
+                <div className="flex items-center gap-2 px-2 py-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <div className="ml-4 px-4 py-1 bg-slate-800 rounded text-xs text-slate-400 font-mono w-full max-w-sm">certmonitor.io/dashboard</div>
+                </div>
+                {/* Image */}
+                <img 
+                    src="/demo/dashboard.jpeg" 
+                    alt="CertMonitor Dashboard" 
+                    className="rounded-lg w-full h-auto border border-slate-700/50"
+                />
+            </div>
+
+            {/* Feature Split Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div className="order-2 lg:order-1">
+                    <h3 className="text-2xl font-bold text-slate-900 mb-4">Detailed Agent Inventory</h3>
+                    <p className="text-slate-600 leading-relaxed mb-6">
+                        Know exactly which server is reporting which certificate. 
+                        Track agent health, last seen status, and network configuration 
+                        from a centralized view.
+                    </p>
+                    <ul className="space-y-3">
+                        <li className="flex items-center gap-3 text-slate-700">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <span>Track Online/Offline status</span>
+                        </li>
+                        <li className="flex items-center gap-3 text-slate-700">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <span>View IP addresses and Hostnames</span>
+                        </li>
+                        <li className="flex items-center gap-3 text-slate-700">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <span>Drill down into individual certs</span>
+                        </li>
+                    </ul>
+                </div>
+                <div className="order-1 lg:order-2 relative rounded-xl bg-slate-900 p-2 shadow-xl border border-slate-800 transform rotate-1 hover:rotate-0 transition-transform duration-500">
+                     {/* Browser Window Chrome */}
+                    <div className="flex items-center gap-2 px-2 py-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <img 
+                        src="/demo/agents.jpeg" 
+                        alt="Agent Inventory" 
+                        className="rounded-lg w-full h-auto border border-slate-700/50"
+                    />
+                </div>
+            </div>
+
+        </div>
+      </section>
+
+      {/* 5. Footer */}
+      <footer className="bg-slate-50 border-t border-slate-200 py-12">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
                 <div className="bg-slate-900 p-1.5 rounded-lg">

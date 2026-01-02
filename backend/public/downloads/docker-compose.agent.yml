@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  cert-agent:
+    # Official Public Image
+    image: ghcr.io/shubhamsharanofficial-pixel/cert-agent:latest
+    container_name: cert-agent
+    restart: unless-stopped
+    
+    # "Host" network mode allows the agent to:
+    # 1. Resolve DNS exactly like the host (e.g. connecting to internal VPNs)
+    # 2. Scan "localhost" ports running on the host
+    network_mode: host
+
+    volumes:
+      # 1. Configuration (Required)
+      # Maps 'config.yaml' from the current directory
+      - ./config.yaml:/app/config.yaml:ro
+
+      # 2. Identity Persistence (Required)
+      # Uses a named volume to persist the Agent UUID across restarts/updates
+      - agent_data:/app/data
+
+      # 3. Scan Targets (Examples - Uncomment to use)
+      # Map host directories you want to scan to /app/scan_target/...
+      
+      # Standard Linux Cert Store:
+      # - /etc/ssl/certs:/app/scan_target/etc-ssl:ro
+      
+      # Example Web Server Path:
+      # - /var/www/html:/app/scan_target/web-root:ro
+
+      # 4. Custom Root CAs (Optional)
+      # If you use a Private CA, put .pem files in a local 'certs' folder and uncomment:
+      # - ./my-private-certs:/app/extra_certs:ro
+
+    # Optional Environment Variables
+    environment:
+      - TZ=UTC
+
+volumes:
+  agent_data:

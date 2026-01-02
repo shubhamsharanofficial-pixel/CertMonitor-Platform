@@ -11,6 +11,11 @@ backend_url: "http://localhost:8080/api/certs"
 # Format: crt_live_...
 api_key: "crt_live_REPLACE_WITH_YOUR_KEY"
 
+# Optional: Override the Agent Name
+# By default, it uses the server's Hostname (or Container ID).
+# Set this to give it a friendly name in the Dashboard.
+# hostname: "my-web-server-01"
+
 # --- 2. File Scanning ---
 # List of directories to recursively scan for certificate files.
 # The agent looks for .pem, .crt, .cer files.
@@ -29,12 +34,18 @@ network_scans:
   # - "localhost:8443"
   # - "postgres-db.internal:5432"
 
-# --- 4. Agent State ---
+# --- 4. Custom Certificates (Optional) ---
+# Directory containing extra Root CA files (.pem/.crt) to trust.
+# Use this if you have a Private CA or Self-Signed certs that
+# are not in the system's default trust store.
+# extra_certs_path: "/app/extra_certs"    #  <-- UnComment to add Private CAs
+
+# --- 5. Agent State ---
 # Directory where the agent stores its identity (UUID) file.
 # Ensure the user running the agent has write permissions here.
 state_path: "."
 
-# --- 5. Logging & Behavior ---
+# --- 6. Logging & Behavior ---
 # How often to run the scan (in minutes). Default is 60.
 scan_interval_minutes: 60
 
