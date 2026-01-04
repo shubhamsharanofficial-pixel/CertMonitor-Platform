@@ -52,7 +52,7 @@ func LoadConfig() *Config {
 		// New Alerter Configs
 		AlerterInterval: time.Duration(getEnvInt("ALERTER_INTERVAL_HOURS", 24)) * time.Hour,
 		// AlerterInterval:     time.Duration(getEnvInt("ALERTER_INTERVAL_SECONDS", 1*60)) * time.Second,
-		AlerterExpiryWindow: time.Duration(getEnvInt("ALERTER_EXPIRY_DAYS", 150)) * 24 * time.Hour,
+		AlerterExpiryWindow: time.Duration(getEnvInt("ALERTER_EXPIRY_DAYS", 30)) * 24 * time.Hour,
 
 		// Initialize the SMTP struct here!
 		SMTP: SMTPConfig{

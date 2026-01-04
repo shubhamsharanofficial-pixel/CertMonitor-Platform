@@ -4,6 +4,11 @@
 
 CertMonitor provides a centralized dashboard to track certificate expiry, verify trust chains, and monitor infrastructure health. Unlike external scanners, it uses a lightweight agent to discover internal certificates (files & ports) securely without opening firewall ports.
 
+## 🌐 Live Demo
+
+🚀 **Deployed on AWS:** Try out the platform here:  
+👉 **[https://certmonitor.systems](https://certmonitor.systems)**
+
 ## **🚀 Features**
 
 * **Agent-Based Discovery:** Scans /etc/ssl, /var/www, and internal ports (e.g., localhost:8443) for certificates.  
@@ -28,6 +33,10 @@ CertMonitor runs as a **4-Container Docker Cluster** orchestrated via Docker Com
    * **Stateless:** Pulls pre-built images from GitHub Container Registry (GHCR).  
 4. **Database (PostgreSQL):**  
    * Persistent storage for users and certificate data.
+
+### 📊 Architecture Diagram
+
+![Architecture Diagram](docs/architecture-diagram.png)
 
 ## **☁️ Deployment Option A: Automated (Terraform)**
 
