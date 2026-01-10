@@ -31,6 +31,7 @@ CertMonitor is a hybrid SSL/TLS monitoring platform that combines **Agent-based 
 * **Smart Alerting:** Deduplicated email alerts via SMTP (Brevo/SendGrid) for expiring certs.
 * **Infrastructure as Code:** Fully automated AWS deployment via Terraform.
 * **Secure Auth:** JWT-based authentication with secure API Key management.
+* **Multi-Architecture Support:** Docker images and Agent binaries are cross-compiled for both amd64 (Intel/AMD) and arm64 (AWS Graviton, Raspberry Pi, Apple Silicon).
 
 ## **🏗 Architecture**
 
@@ -42,6 +43,7 @@ CertMonitor runs as a **4-Container Docker Cluster** orchestrated via Docker Com
     * Proxies traffic to the Frontend.
 2.  **Frontend (Nginx + React):**
     * Serves the UI and acts as an internal Reverse Proxy for API requests.
+    * **Resilient Networking:** Uses dynamic DNS resolution (Docker resolver) to automatically handle container restarts and IP changes without downtime.
 3.  **Backend (Go):**
     * REST API listening internally. Handles ingestion, auth, and background workers.
     * **Cloud Worker:** Runs background routines to scan public "Cloud Monitor" targets.
@@ -138,7 +140,7 @@ Once your server is running (Option A or B):
 1. Log in to the Dashboard.  
 2. Click **"Generate API Key"** (or Rotate Key) in the top navigation bar.  
 3. Copy the provided curl or wget command.  
-4. Run it on your server. It automatically downloads the binary, configures it with your key, and sets up a systemd service.
+4. Run it on your server. The script automatically detects your OS and CPU architecture, downloads the correct binary, and installs it as a systemd service (Linux).
 
 ### **Option B: Manual Binary**
 
