@@ -32,6 +32,10 @@ variable "volume_size" {
 
 variable "db_backup_path" { default = "" }
 variable "private_key_path" { default = "./cert-monitor-key.pem" }
+variable "domain_name" {
+  description = "Optional DNS for the platform"
+  default     = ""
+}
 
 # Secrets
 variable "db_password" { sensitive = true }
@@ -110,6 +114,7 @@ resource "aws_instance" "app_server" {
   # Inject configuration
   user_data = templatefile("user_data.sh", {
     public_ip   = aws_eip.lb.public_ip
+    domain_name = var.domain_name
     db_password = var.db_password
     jwt_secret  = var.jwt_secret
     smtp_host   = "smtp-relay.brevo.com"

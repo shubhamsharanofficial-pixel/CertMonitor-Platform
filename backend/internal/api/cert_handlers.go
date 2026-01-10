@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cert-manager-backend/internal/model"
@@ -33,12 +35,39 @@ func (h *CertHandler) HandleIngest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent_id is required", http.StatusBadRequest)
 		return
 	}
-	if err := h.Service.ProcessReport(r.Context(), report); err != nil {
+
+	clientIP := GetClientIP(r)
+	if err := h.Service.ProcessReport(r.Context(), report, clientIP); err != nil {
 		http.Error(w, "Failed to process report: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte(`{"status":"success"}`))
+}
+
+// GetClientIP extracts the true client IP, handling Nginx headers.
+func GetClientIP(r *http.Request) string {
+	// 1. Check X-Forwarded-For (Standard for proxies)
+	// Format: "client_ip, proxy1, proxy2" - we want the first one
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		if i := strings.Index(fwd, ","); i != -1 {
+			return strings.TrimSpace(fwd[:i])
+		}
+		return fwd
+	}
+
+	// 2. Check X-Real-IP (Nginx specific)
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		return realIP
+	}
+
+	// 3. Fallback to RemoteAddr
+	// RemoteAddr usually comes as "1.2.3.4:5678", we need to split the port.
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr // Return as-is if split fails
+	}
+	return ip
 }
 
 // helper to try parsing ISO then Date

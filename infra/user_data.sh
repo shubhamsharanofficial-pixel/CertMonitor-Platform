@@ -36,7 +36,12 @@ echo "Downloading Deployment Config..."
 curl -o docker-compose.yml https://raw.githubusercontent.com/shubhamsharanofficial-pixel/CertMonitor-Platform/main/docker-compose.prod.yml
 
 # 5. Generate .env file
-# We use the IP passed from Terraform directly
+if [ -n "${domain_name}" ]; then
+    FRONTEND_URL="https://${domain_name}"
+else
+    FRONTEND_URL="http://${public_ip}"
+fi
+
 cat <<EOF > /home/ubuntu/app/.env
 DB_PASSWORD=${db_password}
 JWT_SECRET=${jwt_secret}
@@ -45,8 +50,9 @@ SMTP_PORT=${smtp_port}
 SMTP_USER=${smtp_user}
 SMTP_PASS=${smtp_pass}
 SMTP_SENDER=${smtp_sender}
-FRONTEND_URL=http://${public_ip}
+FRONTEND_URL=$${FRONTEND_URL}
 EOF
+# $$ used to make FRONTEND_URL a local bash variable not a terraform variable
 
 # 6. Start Application
 echo "Pulling images and starting..."

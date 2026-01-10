@@ -96,6 +96,17 @@ type CertResponse struct {
 	OwnerID string `json:"owner_id"`
 }
 
+type Target struct {
+	ID             string    `json:"id"`
+	UserID         string    `json:"user_id,omitempty"`
+	TargetURL      string    `json:"target_url"`
+	FrequencyHours int       `json:"frequency_hours"`
+	LastScannedAt  time.Time `json:"last_scanned_at,omitempty"`
+	Status         string    `json:"last_status,omitempty"`
+	LastError      string    `json:"last_error,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type PaginatedCerts struct {
 	Data  []CertResponse `json:"data"`
 	Total int            `json:"total"`
@@ -108,6 +119,7 @@ type AgentResponse struct {
 	Hostname   string      `json:"hostname"`
 	IPAddress  string      `json:"ip_address"`
 	LastSeenAt time.Time   `json:"last_seen_at"`
+	IsVirtual  bool        `json:"is_virtual"`
 	Status     AgentStatus `json:"status"`
 	CertCount  int         `json:"cert_count"`
 }

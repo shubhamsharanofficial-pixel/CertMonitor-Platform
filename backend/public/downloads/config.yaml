@@ -4,7 +4,7 @@
 
 # --- 1. Backend Connection ---
 # The URL where the agent sends reports.
-backend_url: "http://localhost:8080/api/certs"
+backend_url: "https://certmonitor.systems/api/certs"
 
 # Your unique API Key (Generate this in the Dashboard)
 # This links the agent to your organization.

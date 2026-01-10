@@ -12,6 +12,7 @@ import (
 	"cert-manager-backend/internal/config"
 	"cert-manager-backend/internal/db"
 	"cert-manager-backend/internal/notify"
+	"cert-manager-backend/internal/scanner"
 	"cert-manager-backend/internal/service"
 	"cert-manager-backend/internal/worker"
 
@@ -19,10 +20,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	// 1. Load Environment
+	// =========================================================================
+	// 1. Load Config & Environment
+	// =========================================================================
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, relying on system env vars")
 	}
@@ -30,10 +34,15 @@ func main() {
 	// 2. Load Configuration
 	cfg := config.LoadConfig()
 
-	fmt.Printf("✅ Config Values: AgentOffline=%v, JanitorCleanup=%v, AgentTTL=%v, AlerterInterval=%v, AlerterExpiryWindow=%v\n",
-		cfg.AgentOfflineMinutes, cfg.JanitorCleanupHours, cfg.AgentTTL, cfg.AlerterInterval, cfg.AlerterExpiryWindow)
+	fmt.Printf("✅ Config Loaded: Port=%s | OfflineThreshold=%v | CloudScanInterval=%v | CloudScannerTimeout=%v | CloudScannerUserDefaultScanHour=%v\n",
+		cfg.Port, cfg.AgentOfflineMinutes, cfg.CloudScannerInterval, cfg.CloudScannerTimeout, cfg.CloudScannerUserDefaultScanHour)
 
-	// 3. Database Setup
+	fmt.Printf("✅ Port=%s | AgentTTL=%v | MissingCertTTL=%v | AlerterExpiryWindow=%v | FrontendURL=%v\n",
+		cfg.Port, cfg.AgentTTL, cfg.MissingCertTTL, cfg.AlerterExpiryWindow, cfg.FrontendURL)
+
+	// =========================================================================
+	// 2. Database Setup
+	// =========================================================================
 	store, err := db.NewPostgresStore(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
@@ -44,37 +53,112 @@ func main() {
 		log.Fatalf("Failed to init schema: %v", err)
 	}
 
-	// 4. Service Wiring
-	ingestService := service.NewIngestService(store.Conn, cfg.AgentOfflineMinutes)
+	// =========================================================================
+	// 3. Service Initialization
+	// =========================================================================
 
-	// Create History Service (Needed for Email Notifier)
-	historyService := service.NewHistoryService(store.Conn)
+	// A. Core Services
+	// AgentService: Handles Agent Lifecycle (List, Delete, Cleanup)
+	agentSvc := service.NewAgentService(store.Conn, cfg.AgentOfflineMinutes)
 
-	// Create Email Notifier (Serves as both Notifier AND EmailService)
-	// UPDATED: Now passing cfg.FrontendURL
-	emailNotifier := notify.NewEmailNotifier(cfg.SMTP, cfg.FrontendURL, historyService)
+	// CertificateService: Handles Ingestion (ProcessReport), Cleanup, Listing, Stats
+	// (Previously split between IngestService and CertService)
+	certSvc := service.NewCertificateService(store.Conn, cfg.AgentOfflineMinutes)
 
-	// Inject EmailService into AuthService
-	authService := service.NewAuthService(store.Conn, cfg.JWTSecret, emailNotifier)
+	// HistoryService: Needed for Alerter logs
+	historySvc := service.NewHistoryService(store.Conn)
 
-	// 5. Notifier Setup (For Alerter)
+	// B. Cloud Monitoring Components
+	tlsScanner := scanner.NewTLSScanner(cfg.CloudScannerTimeout)
+	// CloudService: Orchestrates the "Scan -> Save" flow. Consumes certSvc for ingestion.
+	cloudSvc := service.NewAgentLessTargetService(store.Conn, tlsScanner, certSvc, cfg.CloudScannerUserDefaultScanHour)
+
+	// C. Auth & Notifications
+	emailNotifier := notify.NewEmailNotifier(cfg.SMTP, cfg.FrontendURL, historySvc)
+	authSvc := service.NewAuthService(store.Conn, cfg.JWTSecret, emailNotifier)
+
+	// =========================================================================
+	// 4. Handler Wiring
+	// =========================================================================
+
+	authHandler := api.NewAuthHandler(authSvc)
+	agentHandler := api.NewAgentHandler(agentSvc)
+
+	// CertHandler now handles BOTH ingestion (POST) and listing (GET)
+	certHandler := api.NewCertHandler(certSvc)
+
+	cloudHandler := api.NewCloudHandler(cloudSvc)
+
+	// =========================================================================
+	// 5.1 Background Workers
+	// =========================================================================
+
+	// A. Notifier List
 	activeNotifiers := []service.Notifier{
-		notify.NewLogNotifier(),
-		emailNotifier, // This now works as a regular notifier too
+		emailNotifier,
 	}
 
-	// 6. Handler Wiring
-	authHandler := api.NewAuthHandler(authService)
-	certHandler := api.NewCertHandler(ingestService)
-	agentHandler := api.NewAgentHandler(ingestService)
+	// Conditionally add the Log Notifier
+	if cfg.EnableLogAlerts {
+		activeNotifiers = append([]service.Notifier{notify.NewLogNotifier()}, activeNotifiers...)
+		log.Println("✅ Log Alerts Enabled")
+	}
 
-	// 7. Router Setup
+	// B. Cloud Scanner (Agentless Engine)
+	worker.StartAgentlessScanner(
+		cloudSvc,   // Source of Targets (GetStaleTargets)
+		tlsScanner, // The Network Tool
+		certSvc,    // The Data Sink (IngestScanResults)
+		cfg.CloudScannerInterval,
+		cfg.CloudScannerConcurrency,
+	)
+
+	// ==========================================j
+	// 5.2 Background Workers (CRON SCHEDULER)
+	// ==========================================
+
+	// Create the Scheduler
+	c := cron.New()
+
+	// C. Schedule Janitor
+	// Uses cfg.JanitorSchedule (default: "0 0 * * *")
+	_, janitorErr := c.AddFunc(cfg.JanitorSchedule, worker.NewJanitorJob(
+		agentSvc,
+		certSvc,
+		cfg.AgentTTL,
+		cfg.MissingCertTTL,
+	))
+	if janitorErr != nil {
+		log.Fatalf("❌ Failed to schedule Janitor: %v", janitorErr)
+	}
+	log.Printf("✅ Janitor scheduled: %s", cfg.JanitorSchedule)
+
+	// D. Schedule Alerter
+	// Uses cfg.AlerterSchedule (default: "0 9 * * *")
+	_, alerterErr := c.AddFunc(cfg.AlerterSchedule, worker.NewAlerterJob(
+		certSvc,
+		authSvc,
+		activeNotifiers,
+		cfg.AlerterExpiryWindow,
+	))
+	if alerterErr != nil {
+		log.Fatalf("❌ Failed to schedule Alerter: %v", alerterErr)
+	}
+	log.Printf("✅ Alerter scheduled: %s", cfg.AlerterSchedule)
+
+	// Start the Scheduler (runs in its own goroutine)
+	c.Start()
+
+	// =========================================================================
+	// 6. Router Setup
+	// =========================================================================
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{"*"}, // Update for production
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -86,23 +170,24 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// Public Routes
+	// --- Public Routes ---
 	r.Post("/api/signup", authHandler.HandleSignup)
 	r.Post("/api/login", authHandler.HandleLogin)
-	r.Post("/api/certs", certHandler.HandleIngest)
-	r.Get("/api/agent/install", agentHandler.HandleGetInstallScript)
-
-	// NEW: Public Auth Routes (Phase 2)
 	r.Post("/api/auth/verify", authHandler.HandleVerifyEmail)
 	r.Post("/api/auth/forgot-password", authHandler.HandleForgotPassword)
 	r.Post("/api/auth/reset-password", authHandler.HandleResetPassword)
 
-	// Serve Static Binaries (e.g., /api/downloads/agent-linux-amd64)
+	// Ingestion (Physical Agents)
+	// Now mapped to CertHandler because CertService has ProcessReport
+	r.Post("/api/certs", certHandler.HandleIngest)
+
+	// Downloads
+	r.Get("/api/agent/install", agentHandler.HandleGetInstallScript)
 	workDir, _ := os.Getwd()
 	downloadsDir := filepath.Join(workDir, "public", "downloads")
 	FileServer(r, "/api/downloads", http.Dir(downloadsDir))
 
-	// Protected Routes
+	// --- Protected Routes ---
 	r.Group(func(r chi.Router) {
 		r.Use(api.MakeAuthMiddleware(cfg.JWTSecret))
 
@@ -110,44 +195,35 @@ func main() {
 		r.Get("/api/certs", certHandler.HandleListCerts)
 		r.Delete("/api/certs/{id}", certHandler.HandleDeleteInstance)
 		r.Delete("/api/certs/missing", certHandler.HandlePruneMissing)
+		r.Get("/api/stats", certHandler.HandleGetStats)
 
 		// Agents
 		r.Post("/api/key/regenerate", authHandler.HandleRegenerateKey)
 		r.Get("/api/agents", agentHandler.HandleListAgents)
 		r.Delete("/api/agents/{agentID}", agentHandler.HandleDeleteAgent)
+		r.Post("/api/key/regenerate", authHandler.HandleRegenerateKey)
 
-		// Profile Management Routes
+		// Profile
 		r.Get("/api/profile", authHandler.HandleGetProfile)
 		r.Put("/api/profile", authHandler.HandleUpdateProfile)
 
-		// Dashboard Stats
-		r.Get("/api/stats", certHandler.HandleGetStats)
+		// ☁️ Cloud Monitoring (Agentless)
+		r.Post("/api/cloud/targets", cloudHandler.HandleAddTarget)
+		r.Get("/api/cloud/targets", cloudHandler.HandleListTargets)
+		r.Delete("/api/cloud/targets/{id}", cloudHandler.HandleDeleteTarget)
+		r.Put("/api/cloud/targets/{id}", cloudHandler.HandleUpdateTarget)
 	})
 
-	// 8. Background Workers
-	worker.StartJanitor(
-		ingestService,
-		cfg.JanitorCleanupHours,
-		cfg.AgentTTL,
-		cfg.MissingCertTTL,
-	)
-
-	worker.StartAlerter(
-		ingestService,
-		authService,
-		activeNotifiers,
-		cfg.AlerterInterval,
-		cfg.AlerterExpiryWindow,
-	)
-
-	// 9. Start Server
+	// =========================================================================
+	// 7. Start Server
+	// =========================================================================
 	log.Printf("🚀 Server starting on %s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
 
-// Helper function to serve static files from a directory
+// FileServer Helper
 func FileServer(r chi.Router, path string, root http.FileSystem) {
 	if strings.ContainsAny(path, "{}*") {
 		panic("FileServer does not permit any URL parameters.")

@@ -33,8 +33,15 @@ type EmailService interface {
 
 // CertificateService
 type CertificateService interface {
-	ProcessReport(ctx context.Context, report model.AgentReport) error
+	// 1. External Agents (Physical)
+	ProcessReport(ctx context.Context, report model.AgentReport, ipAddress string) error
+
+	// 2. Internal Cloud Worker (Virtual) - NEW
+	// Ingests a batch of certs for a user without needing an API Key.
+	IngestScanResults(ctx context.Context, userID string, certs []model.Certificate) error
+
 	CleanupOrphanedCerts(ctx context.Context) (int64, error)
+	CleanupMissingInstances(ctx context.Context, gracePeriod time.Duration) (int64, error)
 
 	// Uses Functional Options for flexible filtering
 	ListCertificates(ctx context.Context, userID string, opts ...FilterOption) (*model.PaginatedCerts, error)
@@ -50,6 +57,27 @@ type CertificateService interface {
 
 	// Delete all MISSING instances for a user (Bulk Prune)
 	DeleteAllMissingInstances(ctx context.Context, userID string) (int64, error)
+}
+
+// NetworkScanner defines the capability to perform remote TLS scans.
+// This interface allows us to mock the scanner in tests.
+type NetworkScanner interface {
+	// Scan performs the handshake and returns the certificate chain.
+	// target should be in "host:port" format.
+	Scan(ctx context.Context, target string) ([]model.Certificate, error)
+}
+
+type AgentLessTargetService interface {
+	// --- User Facing ---
+	// AddTarget: Validates, Scans immediately, Saves to DB, Ingests result.
+	AddTarget(ctx context.Context, userID, rawURL string, frequency int) (*model.Target, error)
+	UpdateTarget(ctx context.Context, userID, targetID string, frequency int) error
+	ListTargets(ctx context.Context, userID string) ([]model.Target, error)
+	DeleteTarget(ctx context.Context, userID, targetID string) error
+
+	// --- Worker Facing ---
+	GetStaleTargets(ctx context.Context) ([]model.Target, error)
+	UpdateTargetStatus(ctx context.Context, targetID, status, errStr string) error
 }
 
 // AgentService

@@ -1,8 +1,10 @@
 # **CertMonitor Platform**
 
-**A self-hosted, agent-based SSL/TLS certificate monitoring solution.**
+**Total Visibility for Your TLS Infrastructure.**
 
-CertMonitor provides a centralized dashboard to track certificate expiry, verify trust chains, and monitor infrastructure health. Unlike external scanners, it uses a lightweight agent to discover internal certificates (files & ports) securely without opening firewall ports.
+**Built for Cloud, Edge, and On-Premise.**
+
+CertMonitor is a hybrid SSL/TLS monitoring platform that combines **Agent-based discovery** for internal networks with **Agentless Cloud Monitoring** for public endpoints. Whether you manage a single VPS, a Kubernetes cluster, or a fleet of IoT devices, CertMonitor gives you a single pane of glass for every certificate you own.
 
 ## 🌐 Live Demo
 
@@ -11,28 +13,40 @@ CertMonitor provides a centralized dashboard to track certificate expiry, verify
 
 ## **🚀 Features**
 
-* **Agent-Based Discovery:** Scans /etc/ssl, /var/www, and internal ports (e.g., localhost:8443) for certificates.  
-* **Ghost Detection:** Automatically flags certificates that have disappeared from a server ("Soft Delete").  
-* **Smart Alerting:** Sends deduplicated email alerts via SMTP (Brevo/SendGrid) for expiring certs.  
-* **Live Dashboard:** Real-time inventory with 30-second polling updates.  
-* **Secure Auth:** JWT-based authentication with secure API Key management (hashes stored only).  
+### **Hybrid Monitoring**
+* **Agent-Based Discovery:** A lightweight Go binary scans `/etc/ssl`, `/var/www`, and internal ports (e.g., `localhost:8443`) to find certificates behind firewalls.
+* **Agentless Cloud Monitors:** Remotely scan any public URL or IP address (e.g., `google.com`) without installing any software.
+
+### **Intelligent Inventory**
+* **Auto-IP Detection:** Agents automatically report their Public IP (via Nginx headers), making it easy to identify servers in dynamic environments.
+* **Ghost Detection:** Automatically flags certificates that have disappeared from a server ("Soft Delete").
+* **Real-Time Status:** Live heartbeat tracking to detect offline agents immediately.
+
+### **Security First**
+* **Zero-Touch Architecture:** The agent **only** reads Public Certificates (`.crt`). It never accesses, reads, or transmits TLS Private Keys.
+* **Hashed Agent Authentication:** Agents use a unique API Key for ingestion. The backend only stores cryptographically hashed versions of these keys, ensuring that even a database leak does not compromise your agents.
+* **Outbound Only:** Agents push data to the backend via HTTPS. No inbound firewall ports need to be opened.
+
+### **Enterprise Ready**
+* **Smart Alerting:** Deduplicated email alerts via SMTP (Brevo/SendGrid) for expiring certs.
 * **Infrastructure as Code:** Fully automated AWS deployment via Terraform.
+* **Secure Auth:** JWT-based authentication with secure API Key management.
 
 ## **🏗 Architecture**
 
 CertMonitor runs as a **4-Container Docker Cluster** orchestrated via Docker Compose:
 
-1. **Nginx Proxy Manager (Gateway):**  
-   * The only entry point (Ports 80/443).  
-   * Handles **SSL Termination** (Let's Encrypt) and auto-renewal.  
-   * Proxies traffic to the Frontend.  
-2. **Frontend (Nginx \+ React):**  
-   * Serves the UI and acts as an internal Reverse Proxy for API requests.  
-3. **Backend (Go):**  
-   * REST API listening internally. Handles ingestion, auth, and background workers.  
-   * **Stateless:** Pulls pre-built images from GitHub Container Registry (GHCR).  
-4. **Database (PostgreSQL):**  
-   * Persistent storage for users and certificate data.
+1.  **Nginx Proxy Manager (Gateway):**
+    * The only entry point (Ports 80/443).
+    * Handles **SSL Termination** (Let's Encrypt) and auto-renewal.
+    * Proxies traffic to the Frontend.
+2.  **Frontend (Nginx + React):**
+    * Serves the UI and acts as an internal Reverse Proxy for API requests.
+3.  **Backend (Go):**
+    * REST API listening internally. Handles ingestion, auth, and background workers.
+    * **Cloud Worker:** Runs background routines to scan public "Cloud Monitor" targets.
+4.  **Database (PostgreSQL):**
+    * Persistent storage for users, agents, and certificate data.
 
 ### 📊 Architecture Diagram
 
@@ -143,6 +157,15 @@ Once your server is running (Option A or B):
 3. Run the container:  
    docker compose \-f docker-compose.agent.yml up \-d
 
+## **📫 Contact & Support**
+
+I am open to feedback, bug reports, and feature requests!
+
+* **👤 Developer:** Shubham Sharan
+* **📧 Email:** [shubhamsharanofficial@gmail.com](mailto:shubhamsharanofficial@gmail.com)
+* **🔗 LinkedIn:** [shubham-sharan](https://www.linkedin.com/in/shubham-sharan-56765b226)
+* **💻 GitHub:** [shubhamsharanofficial-pixel](https://github.com/shubhamsharanofficial-pixel)
+
 ## **🔧 Development (Local)**
 
 To contribute to the code:
@@ -156,4 +179,17 @@ go run cmd/server/main.go
 
 cd frontend  
 npm install  
-npm run dev  
+npm run dev
+
+## **📄 License**
+
+**Source Available.**
+
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
+
+* **✅ Free for Personal Use:** You are free to use, modify, and run this software for personal, educational, or non-profit purposes.
+* **❌ Commercial Use Prohibited:** You may NOT use this software for business purposes, including monitoring company infrastructure or offering it as a service.
+
+**💼 Want to use this for your business?** Please contact me via [email](mailto:shubhamsharanofficial@gmail.com) for a commercial license.
+
+---

@@ -9,7 +9,7 @@ import (
 )
 
 // ListCertificates fetches certificates using Functional Options.
-func (s *IngestService) ListCertificates(ctx context.Context, userID string, opts ...FilterOption) (*model.PaginatedCerts, error) {
+func (s *PostgresCertificateService) ListCertificates(ctx context.Context, userID string, opts ...FilterOption) (*model.PaginatedCerts, error) {
 	// A. Apply Defaults
 	filter := &CertFilter{
 		Limit:  10,
@@ -176,7 +176,7 @@ func (s *IngestService) ListCertificates(ctx context.Context, userID string, opt
 }
 
 // DeleteInstance removes a specific certificate instance (Hard Delete).
-func (s *IngestService) DeleteInstance(ctx context.Context, userID, instanceID string) error {
+func (s *PostgresCertificateService) DeleteInstance(ctx context.Context, userID, instanceID string) error {
 	// We use a JOIN to ensure the instance actually belongs to an agent owned by the requesting user.
 	// This prevents users from deleting each other's data by guessing IDs.
 	query := `
@@ -201,7 +201,7 @@ func (s *IngestService) DeleteInstance(ctx context.Context, userID, instanceID s
 }
 
 // DeleteAllMissingInstances removes ALL instances marked 'MISSING' for a user.
-func (s *IngestService) DeleteAllMissingInstances(ctx context.Context, userID string) (int64, error) {
+func (s *PostgresCertificateService) DeleteAllMissingInstances(ctx context.Context, userID string) (int64, error) {
 	query := `
 		DELETE FROM certificate_instances ci
 		USING agents a
@@ -219,7 +219,7 @@ func (s *IngestService) DeleteAllMissingInstances(ctx context.Context, userID st
 }
 
 // CleanupOrphanedCerts (Unchanged)
-func (s *IngestService) CleanupOrphanedCerts(ctx context.Context) (int64, error) {
+func (s *PostgresCertificateService) CleanupOrphanedCerts(ctx context.Context) (int64, error) {
 	query := `
         DELETE FROM certificates 
         WHERE id NOT IN (
@@ -234,7 +234,7 @@ func (s *IngestService) CleanupOrphanedCerts(ctx context.Context) (int64, error)
 }
 
 // GetExpiringCertificates fetches certificates expiring within the threshold.
-func (s *IngestService) GetExpiringCertificates(ctx context.Context, threshold time.Duration) ([]model.CertResponse, error) {
+func (s *PostgresCertificateService) GetExpiringCertificates(ctx context.Context, threshold time.Duration) ([]model.CertResponse, error) {
 	cutoff := time.Now().Add(threshold)
 
 	query := `
@@ -298,7 +298,7 @@ func (s *IngestService) GetExpiringCertificates(ctx context.Context, threshold t
 }
 
 // GetDashboardStats returns summary counts for the dashboard.
-func (s *IngestService) GetDashboardStats(ctx context.Context, userID string) (*model.DashboardStats, error) {
+func (s *PostgresCertificateService) GetDashboardStats(ctx context.Context, userID string) (*model.DashboardStats, error) {
 	stats := &model.DashboardStats{}
 
 	// Uses 'current_status' = 'ACTIVE' to ensure we don't count missing certs

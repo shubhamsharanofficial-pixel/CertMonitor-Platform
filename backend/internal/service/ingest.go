@@ -11,20 +11,20 @@ import (
 	"time"
 )
 
-type IngestService struct {
+type PostgresCertificateService struct {
 	DB                    *sql.DB
 	AgentOfflineThreshold time.Duration
 }
 
-func NewIngestService(db *sql.DB, offlineThreshold time.Duration) *IngestService {
-	return &IngestService{
+func NewCertificateService(db *sql.DB, offlineThreshold time.Duration) *PostgresCertificateService {
+	return &PostgresCertificateService{
 		DB:                    db,
 		AgentOfflineThreshold: offlineThreshold,
 	}
 }
 
-// ProcessReport handles the transaction for an incoming agent report
-func (s *IngestService) ProcessReport(ctx context.Context, report model.AgentReport) error {
+// --- 1. External Agent Ingestion (Physical) ---
+func (s *PostgresCertificateService) ProcessReport(ctx context.Context, report model.AgentReport, ipAddress string) error {
 	// 1. Auth Check
 	if report.APIKey == "" {
 		return fmt.Errorf("missing api_key")
@@ -50,26 +50,122 @@ func (s *IngestService) ProcessReport(ctx context.Context, report model.AgentRep
 
 	batchTime := time.Now()
 
-	// 3. Upsert Agent
+	// 3. Upsert Physical Agent
+	// Note: is_virtual defaults to FALSE here
 	queryAgent := `
-        INSERT INTO agents (id, user_id, hostname, last_seen_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO agents (id, user_id, hostname, last_seen_at, is_virtual, ip_address)
+        VALUES ($1, $2, $3, $4, FALSE, $5)
         ON CONFLICT (id) DO UPDATE 
         SET last_seen_at = EXCLUDED.last_seen_at, 
             hostname = EXCLUDED.hostname,
-            user_id = EXCLUDED.user_id;
+            user_id = EXCLUDED.user_id,
+			ip_address = EXCLUDED.ip_address;
     `
-	_, err = tx.ExecContext(ctx, queryAgent, report.AgentID, userID, report.Hostname, batchTime)
+
+	_, err = tx.ExecContext(ctx, queryAgent, report.AgentID, userID, report.Hostname, batchTime, ipAddress)
 	if err != nil {
 		return fmt.Errorf("failed to upsert agent: %w", err)
 	}
+	// 4. Process Certificates (Shared Logic)
+	if err := s.upsertCertificates(ctx, tx, report.AgentID, report.Certificates, batchTime); err != nil {
+		return err
+	}
 
-	// 4. Process Certificates
-	for _, cert := range report.Certificates {
+	// 5. Soft Delete Ghosts (Only for Physical Agents)
+	// Cloud agents perform partial scans, so we CANNOT assume missing items are deleted.
+	_, err = tx.ExecContext(ctx, `
+        UPDATE certificate_instances 
+        SET current_status = 'MISSING'
+        WHERE agent_id = $1 
+        AND scanned_at != $2
+    `, report.AgentID, batchTime)
+
+	if err != nil {
+		return fmt.Errorf("failed to mark missing certificates: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("transaction commit failed: %w", err)
+	}
+
+	log.Printf("✅ Processed report from %s (User: %s)", report.Hostname, userID)
+	return nil
+}
+
+// --- 2. Internal Cloud Ingestion (Virtual) ---
+
+func (s *PostgresCertificateService) IngestScanResults(ctx context.Context, userID string, certs []model.Certificate) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	batchTime := time.Now()
+
+	// 1. Get or Create Virtual Agent
+	// We use a deterministic UUID based on UserID to ensure 1 Cloud Agent per User.
+	// Or we can query for one. Let's query/create for safety.
+	agentID, err := s.ensureVirtualAgent(ctx, tx, userID, batchTime)
+	if err != nil {
+		return fmt.Errorf("failed to ensure virtual agent: %w", err)
+	}
+
+	// 2. Process Certificates (Shared Logic)
+	// Note: We do NOT perform Ghost Pruning here because cloud scans are partial updates.
+	if err := s.upsertCertificates(ctx, tx, agentID, certs, batchTime); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// --- 3. Shared Helpers ---
+
+// ensureVirtualAgent finds the existing "Cloud Monitor" agent for this user or creates one.
+func (s *PostgresCertificateService) ensureVirtualAgent(ctx context.Context, tx *sql.Tx, userID string, seenAt time.Time) (string, error) {
+	var agentID string
+
+	// Check for existing virtual agent
+	err := tx.QueryRowContext(ctx, `
+        SELECT id FROM agents 
+        WHERE user_id = $1 AND is_virtual = TRUE 
+        LIMIT 1
+    `, userID).Scan(&agentID)
+
+	if err == sql.ErrNoRows {
+		// Create new Virtual Agent
+		// We can generate a UUID in Go or let DB do it.
+		// Since we need the ID immediately, let's generate in SQL or use a placeholder.
+		// Assuming Postgres 'gen_random_uuid()' is available, but we need the ID back.
+		err = tx.QueryRowContext(ctx, `
+            INSERT INTO agents (id, user_id, hostname, last_seen_at, is_virtual)
+            VALUES (gen_random_uuid(), $1, 'Cloud Monitor', $2, TRUE)
+            RETURNING id
+        `, userID, seenAt).Scan(&agentID)
+		if err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	} else {
+		// Update last_seen_at
+		_, err = tx.ExecContext(ctx, "UPDATE agents SET last_seen_at = $1 WHERE id = $2", seenAt, agentID)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return agentID, nil
+}
+
+// upsertCertificates handles the core logic of saving Definitions and Instances
+func (s *PostgresCertificateService) upsertCertificates(ctx context.Context, tx *sql.Tx, agentID string, certs []model.Certificate, batchTime time.Time) error {
+	for _, cert := range certs {
 		var certID string
 
-		// Deduplicate Certificate Definition
-		err = tx.QueryRowContext(ctx,
+		// A. Deduplicate Certificate Definition
+		err := tx.QueryRowContext(ctx,
 			`SELECT id FROM certificates 
              WHERE serial_number = $1 
              AND issuer_cn = $2
@@ -92,30 +188,23 @@ func (s *IngestService) ProcessReport(ctx context.Context, report model.AgentRep
 			).Scan(&certID)
 
 			if err != nil {
-				return fmt.Errorf("failed to insert cert %s: %w", cert.Serial, err)
+				return fmt.Errorf("failed to insert cert definition %s: %w", cert.Serial, err)
 			}
 		} else if err != nil {
 			return fmt.Errorf("failed to query cert existence: %w", err)
 		}
 
-		// Determine Source Type & UID
+		// B. Upsert Instance
+		// Logic: Always mark as ACTIVE and update scanned_at
 		sourceType := cert.SourceType
 		if sourceType == "" {
 			sourceType = "FILE"
 		}
-
-		// Fallback for legacy agents sending 'Path' mapped to SourceUID
 		sourceUID := cert.SourceUID
 		if sourceUID == "" {
-			// If Agent sent nothing, skip it or error out.
-			// Ideally agent should be updated to send SourceUID.
-			// Assuming 'cert.SourceUID' maps to the JSON field 'source_uid'
-			// which used to be 'path'.
-			continue
+			continue // Skip invalid items
 		}
 
-		// Link Instance (Upsert with current_status = ACTIVE)
-		// RENAMED: file_path -> source_uid
 		_, err = tx.ExecContext(ctx, `
             INSERT INTO certificate_instances (agent_id, certificate_id, source_uid, source_type, is_trusted, trust_error, current_status, scanned_at)
             VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7)
@@ -126,37 +215,17 @@ func (s *IngestService) ProcessReport(ctx context.Context, report model.AgentRep
                 trust_error = EXCLUDED.trust_error,
                 current_status = 'ACTIVE',
                 scanned_at = EXCLUDED.scanned_at;
-        `, report.AgentID, certID, sourceUID, sourceType, cert.IsTrusted, cert.TrustError, batchTime)
+        `, agentID, certID, sourceUID, sourceType, cert.IsTrusted, cert.TrustError, batchTime)
 
 		if err != nil {
 			return fmt.Errorf("failed to link instance %s: %w", sourceUID, err)
 		}
 	}
-
-	// 5. Soft Delete Ghosts
-	// Update current_status = 'MISSING' for any cert belonging to this agent
-	// that was NOT updated in this batch (scanned_at != batchTime).
-	_, err = tx.ExecContext(ctx, `
-        UPDATE certificate_instances 
-        SET current_status = 'MISSING'
-        WHERE agent_id = $1 
-        AND scanned_at != $2
-    `, report.AgentID, batchTime)
-
-	if err != nil {
-		return fmt.Errorf("failed to mark missing certificates: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("transaction commit failed: %w", err)
-	}
-
-	log.Printf("✅ Processed report from %s (User: %s)", report.Hostname, userID)
 	return nil
 }
 
 // CleanupMissingInstances deletes instances that have been MISSING for too long.
-func (s *IngestService) CleanupMissingInstances(ctx context.Context, gracePeriod time.Duration) (int64, error) {
+func (s *PostgresCertificateService) CleanupMissingInstances(ctx context.Context, gracePeriod time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-gracePeriod)
 
 	query := `

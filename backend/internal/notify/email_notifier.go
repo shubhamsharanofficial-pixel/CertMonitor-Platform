@@ -14,7 +14,7 @@ import (
 
 type EmailNotifier struct {
 	cfg         config.SMTPConfig
-	frontendURL string // NEW field
+	frontendURL string
 	historySvc  service.HistoryService
 }
 
@@ -175,7 +175,10 @@ func (e *EmailNotifier) buildAlertHTML(user model.User, certs []model.CertRespon
 		}
 
 		sb.WriteString("<tr>")
-		sb.WriteString(fmt.Sprintf("<td>%s<br/><small>%s</small></td>", cert.AgentHostname, cert.SourceUID))
+		sb.WriteString(fmt.Sprintf(
+			"<td><a href='%s' style='color:#2563EB; text-decoration:none;'>%s</a><br/><small>%s</small></td>",
+			e.frontendURL, cert.AgentHostname, cert.SourceUID,
+		))
 		sb.WriteString(fmt.Sprintf("<td>CN=%s<br/><small>Issuer: %s</small></td>", cert.Subject.CN, cert.Issuer.CN))
 		sb.WriteString(fmt.Sprintf("<td><b style='color:%s'>%s</b><br/><small>%d days left</small></td>", color, cert.ValidUntil.Format("2006-01-02"), daysLeft))
 		sb.WriteString("</tr>")

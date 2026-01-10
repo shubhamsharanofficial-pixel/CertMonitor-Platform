@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing'; 
-import Downloads from './pages/Downloads'; // <--- Check this import
+import Downloads from './pages/Downloads';
+import CloudMonitor from './pages/CloudMonitor';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Forgot from './pages/Forgot';
@@ -41,6 +42,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Agents />
+            </ProtectedRoute>
+          } 
+        />
+
+        <Route 
+          path="/cloud" 
+          element={
+            <ProtectedRoute>
+              <CloudMonitor />
             </ProtectedRoute>
           } 
         />
